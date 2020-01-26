@@ -1,0 +1,62 @@
+#!/bin/bash
+
+# Variables
+rgName="mslearn"
+location="japaneast"
+containerName="e-paas-aci"
+dnsName=mydnsname
+storageAccountName="epaasstorage$RANDOM"
+storageAccountType="Standard_LRS"
+storageShareName="container-share"
+
+# Create resource group.
+az group create --name $rgName --location $location
+
+# Create storage account.
+az storage account create --resource-group $rgName --location $location \
+  --name $storageAccountName \
+  --sku $storageAccountType
+
+# Get connection string.
+export AZURE_STORAGE_CONNECTION_STRING=$(az storage account show-connection-string \
+  --resource-group $rgName \
+  --name $storageAccountName \
+  --output tsv)
+
+# Create file share.
+az storage share create --name $storageShareName --quota 10
+
+STORAGE_KEY=$(az storage account keys list \
+  --resource-group $rgName \
+  --account-name $storageAccountName \
+  --query "[0].value" \
+  --output tsv)
+
+# Create azure container.
+az container create --resource-group $rgName --location $location --name $containerName --image microsoft/aci-hellofiles \
+  --dns-name-label $dnsName \
+  --ip-address Public \
+  --cpu 1 \
+  --memory 1 \
+  --ports 80 \
+  --restart-policy Always \
+  --azure-file-volume-account-name $storageAccountName \
+  --azure-file-volume-account-key $STORAGE_KEY \
+  --azure-file-volume-share-name $storageShareName \
+  --azure-file-volume-mount-path /aci/logs/
+
+# Execute a command from within a running container of a container group.
+az container exec --resource-group $rgName --name $containerName --exec-command "/bin/sh"
+
+# Attach local standard output and error streams to a container in a container group.
+az container attach --resource-group $rgName --name $containerName
+
+# Get aci id.
+CONTAINER_ID=$(az container show \
+  --resource-group $rgName \
+  --name $containerName \
+  --query id \
+  --output tsv)
+
+# Monitor CPU usage.
+az monitor metrics list --resource $CONTAINER_ID --metric CPUUsage -o table

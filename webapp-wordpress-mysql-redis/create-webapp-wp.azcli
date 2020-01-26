@@ -1,0 +1,74 @@
+#!/bin/bash
+
+# Variables
+# common
+rgName="wordpress-tutorial"
+location="japaneast"
+# web app
+appServicePlanName="e-paas-pln"
+webAppName="e-paas-app"
+appEdition="S1"
+# mysql
+dbName="e-paas-mysql"
+dbEdition="B_Gen5_1"
+dbLogin="sqladmin"
+dbPassword="My5up3rStr0ngPaSw0rd!"
+
+# Create resource group.
+az group create --name $rgName --location $location
+
+# Create app service plan.
+az appservice plan create --resource-group $rgName --location $location \
+    --name $appServicePlanName \
+    --sku $appEdition \
+    --is-linux 
+
+# Create web app.
+az webapp create --resource-group $rgName \
+    --name $webAppName \
+    --plan $appServicePlanName \
+    --multicontainer-config-type compose \
+    --multicontainer-config-file docker-compose.yml
+
+# Create mysql server.
+az mysql server create --resource-group $rgName --location $location \
+    --name $dbName \
+    --admin-user $dbLogin \
+    --admin-password $dbPassword \
+    --sku-name $dbEdition \
+    --storage-size 5120 \
+    --version 5.7 \
+    --auto-grow "Disabled"
+
+# Config firewall rule.
+az mysql server firewall-rule create --resource-group $rgName \
+    --name allAzureIPs \
+    --server $dbName \
+    --start-ip-address 0.0.0.0 \
+    --end-ip-address 0.0.0.0
+
+# Create database for wordpress.
+az mysql db create --resource-group $rgName \
+    --server-name $dbName \
+    --name wordpress
+
+# Configure database variables in WordPress.
+az webapp config appsettings set --resource-group $rgName \
+    --name $webAppName \
+    --settings WORDPRESS_DB_HOST="$dbName.mysql.database.azure.com" WORDPRESS_DB_USER="sqladmin@$dbName" WORDPRESS_DB_PASSWORD="$dbPassword" WORDPRESS_DB_NAME="wordpress" MYSQL_SSL_CA="BaltimoreCyberTrustroot.crt.pem"
+
+# Update to use persistent storage.
+az webapp config appsettings set --resource-group $rgName \
+     --name $webAppName \
+    --settings WEBSITES_ENABLE_APP_SERVICE_STORAGE=TRUE
+
+# Update to use redis.
+az webapp config appsettings set --resource-group $rgName \
+    --name $webAppName \
+    --settings WP_REDIS_HOST="redis"
+
+# Update web app container image.
+az webapp config container set --resource-group $rgName \
+    --name $webAppName \
+    --multicontainer-config-type compose \
+    --multicontainer-config-file docker-compose.yml

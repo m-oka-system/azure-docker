@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# Variables
+rgName="mslearn"
+location="japaneast"
+repoName="epaasrepo"
+sku="Basic"
+acrServer="$repoName.azurecr.io"
+image=webimage
+appServicePlanName="e-paas-pln"
+webAppName="e-paas-app"
+
+# Create resource group.
+az group create --name $rgName --location $location
+
+# Create azure container registory.
+az acr create --name $repoName --resource-group $rgName --sku $sku --admin-enabled true
+
+# Build a Docker image and upload it to azure container registry.
+git clone https://github.com/MicrosoftDocs/mslearn-deploy-run-container-app-service.git
+cd mslearn-deploy-run-container-app-service/node
+az acr build --registry $repoName --image $image:v1 .
+
+# Create app service plan.
+az appservice plan create --resource-group $rgName --location $location \
+    --name $appServicePlanName \
+    --is-linux --sku FREE
+
+# Create web app.
+az webapp create --resource-group $rgName \
+    --name $webAppName \
+    --plan $appServicePlanName \
+    --deployment-container-image-name $acrServer/$image
+
+# Enable continuous deployment.
+az webapp deployment container config --resource-group $rgName \
+    --name $webAppName \
+    --enable-cd true
+
+# az acr task create --registry <container_registry_name> \
+#     --name buildwebapp \
+#     --image webimage \
+#     --context https://github.com/MicrosoftDocs/mslearn-deploy-run-container-app-service.git \
+#     --branch master \
+#     --file Dockerfile \
+#     --git-access-token <access_token>
+
+# Build docker image at acr.(No need to local build and push registry)
+az acr build --registry $repoName --image $image:v2 .

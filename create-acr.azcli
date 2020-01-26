@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Variables
+rgName="mslearn"
+location="japaneast"
+repoName="epaasrepo"
+sku="Basic"
+acrServer="$repoName.azurecr.io"
+
+# Create resource group.
+az group create --name $rgName --location $location
+
+# Create azure container registory.
+az acr create --name $repoName --resource-group $rgName --sku $sku --admin-enabled true
+
+# Show username and password.
+# az acr credential show --name $repoName
+
+# Login to acr.
+az acr login --name $repoName
+# docker login --name $acrServer
+
+# Build docker image.
+docker build -t myapp .
+
+# Create tag
+docker tag myapp:latest $acrServer/myapp:v1
+
+# Push image to acr.
+docker push $acrServer/myapp:v1
+
+# Delete local image.
+docker image ls $acrServer/myapp:v1
+docker image rm $acrServer/myapp:v1
+
+# Pull image from acr.
+docker pull $acrServer/myapp:v1
+
+# Build docker image at acr.(No need to local build and push registry)
+az acr build --registry $repoName --image helloacrtasks:v1 -f DockerfileNodejs .
+
+# List repositories in acr.
+az acr repository list --name $repoName -o table
+
+# manifests	Show manifests of a repository in acr.
+az acr repository show-manifests --name $repoName --repository myapp
